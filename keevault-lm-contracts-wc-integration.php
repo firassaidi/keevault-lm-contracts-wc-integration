@@ -10,7 +10,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-class keevault_lm_contracts_wc_integration {
+class Keevault_LM_Contracts_WC_Integration {
 
 	public function __construct() {
 		// Initialize Keevault Settings menu and fields
@@ -26,10 +26,11 @@ class keevault_lm_contracts_wc_integration {
 		add_action( 'woocommerce_save_product_variation', [ $this, 'save_keevault_variation_settings' ], 10, 2 );
 
 		// Order Hook for license creation
-		add_action( 'woocommerce_thankyou', [ $this, 'create_contract_on_order' ] );
+		add_action( 'woocommerce_order_status_processing', [ $this, 'create_contract_on_order' ] );
+		add_action( 'woocommerce_order_status_completed', [ $this, 'create_contract_on_order' ] );
 	}
 
-	public function add_keevault_menu() {
+	public function add_keevault_menu(): void {
 		add_menu_page(
 			'Keevault Settings',
 			'Keevault',
@@ -40,7 +41,7 @@ class keevault_lm_contracts_wc_integration {
 		);
 	}
 
-	public function keevault_settings_init() {
+	public function keevault_settings_init(): void {
 		register_setting( 'keevault_lm_contracts_settings', 'keevault_lm_contracts_api_key' );
 		register_setting( 'keevault_lm_contracts_settings', 'keevault_lm_contracts_api_url' );
 
@@ -57,7 +58,7 @@ class keevault_lm_contracts_wc_integration {
 		}, 'keevault_lm_contracts_settings', 'keevault_lm_contracts_global_section' );
 	}
 
-	public function keevault_settings_page() {
+	public function keevault_settings_page(): void {
 		?>
 		<form action="options.php" method="post">
 			<?php
@@ -69,7 +70,7 @@ class keevault_lm_contracts_wc_integration {
 		<?php
 	}
 
-	public function add_keevault_product_settings() {
+	public function add_keevault_product_settings(): void {
 		echo '<div class="options_group">';
 
 		woocommerce_wp_text_input( [
@@ -91,7 +92,7 @@ class keevault_lm_contracts_wc_integration {
 		echo '</div>';
 	}
 
-	public function save_keevault_product_settings( $post_id ) {
+	public function save_keevault_product_settings( $post_id ): void {
 		$keevault_product_id       = isset( $_POST['_keevault_product_id'] ) ? sanitize_text_field( $_POST['_keevault_product_id'] ) : '';
 		$keevault_license_quantity = isset( $_POST['_keevault_license_quantity'] ) ? intval( $_POST['_keevault_license_quantity'] ) : 1;
 
@@ -117,7 +118,7 @@ class keevault_lm_contracts_wc_integration {
 		] );
 	}
 
-	public function save_keevault_variation_settings( $variation_id, $i ) {
+	public function save_keevault_variation_settings( $variation_id, $i ): void {
 		$keevault_product_id       = isset( $_POST[ '_keevault_product_id_' . $variation_id ] ) ? sanitize_text_field( $_POST[ '_keevault_product_id_' . $variation_id ] ) : '';
 		$keevault_license_quantity = isset( $_POST[ '_keevault_license_quantity_' . $variation_id ] ) ? intval( $_POST[ '_keevault_license_quantity_' . $variation_id ] ) : 1;
 
@@ -125,27 +126,33 @@ class keevault_lm_contracts_wc_integration {
 		update_post_meta( $variation_id, '_keevault_license_quantity', $keevault_license_quantity );
 	}
 
-	public function create_contract_on_order( $order_id ) {
+	public function create_contract_on_order( $order_id ): void {
 		$order = wc_get_order( $order_id );
 
-		$api_key = get_option( 'keevault_lm_contracts_api_key' );
-		$api_url = get_option( 'keevault_lm_contracts_api_url' );
+		if ( in_array( $order->get_status(), [ 'processing', 'completed' ] ) ) {
+			$api_key = get_option( 'keevault_lm_contracts_api_key' );
+			$api_url = get_option( 'keevault_lm_contracts_api_url' );
 
-		foreach ( $order->get_items() as $item ) {
-			$product_id   = $item->get_product_id();
-			$variation_id = $item->get_variation_id();
+			foreach ( $order->get_items() as $item ) {
+				$product_id   = $item->get_product_id();
+				$variation_id = $item->get_variation_id();
 
-			// Get Keevault details for either simple or variation product
-			$keevault_product_id = $variation_id ? get_post_meta( $variation_id, '_keevault_product_id', true ) : get_post_meta( $product_id, '_keevault_product_id', true );
-			$license_quantity    = $variation_id ? get_post_meta( $variation_id, '_keevault_license_quantity', true ) : get_post_meta( $product_id, '_keevault_license_quantity', true );
+				// Get Keevault details for either simple or variation product
+				$keevault_product_id = $variation_id ? get_post_meta( $variation_id, '_keevault_product_id', true ) : get_post_meta( $product_id, '_keevault_product_id', true );
+				$license_quantity    = $variation_id ? get_post_meta( $variation_id, '_keevault_license_quantity', true ) : get_post_meta( $product_id, '_keevault_license_quantity', true );
 
-			if ( $keevault_product_id && $license_quantity ) {
-				$this->create_keevault_contract( $api_key, $api_url, $keevault_product_id, $license_quantity, $order );
+				if ( $keevault_product_id && $license_quantity ) {
+					for ( $i = 1; $i <= $item->get_quantity(); $i ++ ) {
+						if ( ! $this->contracts_created( $order_id, $item->get_id(), $i ) ) {
+							$this->create_keevault_contract( $api_key, $api_url, $keevault_product_id, $license_quantity, $order, $item->get_id(), $i );
+						}
+					}
+				}
 			}
 		}
 	}
 
-	private function create_keevault_contract( $api_key, $api_url, $product_id, $license_quantity, $order ) {
+	private function create_keevault_contract( $api_key, $api_url, $product_id, $license_quantity, $order, $item_id, $item_number ): void {
 		$endpoint = '/api/v1/create-contract';
 		$body     = [
 			'api_key'               => $api_key,
@@ -172,16 +179,31 @@ class keevault_lm_contracts_wc_integration {
 			$response_body = null;
 
 			if ( ! is_wp_error( $response ) ) {
-				$response_body = json_decode( wp_remote_retrieve_body( $response ) );
-
-				error_log( "Keevault API response {$retry_limit}: " . print_r( $response_body, true ) );
+				$response_body = json_decode( wp_remote_retrieve_body( $response ), true );
 			}
 
 			$retry_limit ++;
-		} while ( ( is_wp_error( $response ) || isset( $response_body->response->errors->contract_key ) ) && $retry_limit < 15 );
+		} while ( ( is_wp_error( $response ) || isset( $response_body['response']['errors']['contract_key'] ) ) && $retry_limit < 15 );
+
+		if ( ! is_wp_error( $response ) && isset( $response_body['response']['code'] ) && $response_body['response']['code'] == 841 ) {
+			global $wpdb;
+
+			$response_body['response']['contract']['order_id']    = $order->get_id();
+			$response_body['response']['contract']['item_id']     = $item_id;
+			$response_body['response']['contract']['item_number'] = $item_number;
+			unset( $response_body['response']['contract']['license_keys_count'] );
+
+			$wpdb->insert( $wpdb->prefix . 'keevault_contracts', $response_body['response']['contract'] );
+		}
 	}
 
-	private function uuid() {
+	private function contracts_created( $order_id, $item_id, $item_number ): bool {
+		global $wpdb;
+
+		return $wpdb->get_var( "SELECT COUNT(*) FROM " . $wpdb->prefix . "keevault_contracts WHERE order_id = $order_id AND item_id = $item_id AND item_number = $item_number" ) >= 1;
+	}
+
+	private function uuid(): string {
 		$data = random_bytes( 16 );
 
 		$data[6] = chr( ord( $data[6] ) & 0x0f | 0x40 ); // set version to 0100
@@ -189,6 +211,40 @@ class keevault_lm_contracts_wc_integration {
 
 		return vsprintf( '%s%s-%s-%s-%s-%s%s%s', str_split( bin2hex( $data ), 4 ) );
 	}
+
+	// Register activation hook for creating the database table
+	public static function activate() {
+		global $wpdb;
+
+		$table_name      = $wpdb->prefix . 'keevault_contracts';
+		$charset_collate = $wpdb->get_charset_collate();
+
+		$sql = "CREATE TABLE IF NOT EXISTS $table_name (
+		            id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+		            order_id INT UNSIGNED NOT NULL,
+		            item_id INT UNSIGNED NOT NULL,
+		            item_number INT UNSIGNED NOT NULL,
+		            name VARCHAR(255) COLLATE utf8mb4_unicode_ci NOT NULL,
+		            information TEXT COLLATE utf8mb4_unicode_ci NOT NULL,
+		            contract_key VARCHAR(255) COLLATE utf8mb4_unicode_ci NOT NULL,
+		            license_keys_quantity INT UNSIGNED NOT NULL,
+		            product_id BIGINT UNSIGNED NOT NULL,
+		            can_get_info TINYINT(1) NOT NULL DEFAULT '1',
+		            can_generate TINYINT(1) NOT NULL DEFAULT '1',
+		            can_destroy TINYINT(1) NOT NULL DEFAULT '1',
+		            can_destroy_all TINYINT(1) NOT NULL DEFAULT '0',
+		            status VARCHAR(255) COLLATE utf8mb4_unicode_ci NOT NULL,
+		            created_at TIMESTAMP NULL DEFAULT NULL,
+		            updated_at TIMESTAMP NULL DEFAULT NULL,
+		            PRIMARY KEY (id)
+        	) $charset_collate;";
+
+		require_once( ABSPATH . 'wp-admin/includes/upgrade.php' );
+		dbDelta( $sql );
+	}
 }
 
-new keevault_lm_contracts_wc_integration();
+new Keevault_LM_Contracts_WC_Integration();
+
+// Register the activation hook to create the database table
+register_activation_hook( __FILE__, [ 'Keevault_LM_Contracts_WC_Integration', 'activate' ] );
