@@ -28,6 +28,86 @@ class Keevault_LM_Contracts_WC_Integration {
 		// Order Hook for license creation
 		add_action( 'woocommerce_order_status_processing', [ $this, 'create_contract_on_order' ] );
 		add_action( 'woocommerce_order_status_completed', [ $this, 'create_contract_on_order' ] );
+
+		// Add my-account endpoint
+		add_action( 'init', [ $this, 'contracts_my_account_endpoint' ] );
+		add_filter( 'query_vars', [ $this, 'contracts_query_vars' ], 0 );
+		add_action( 'woocommerce_account_contracts_endpoint', [ $this, 'contracts_endpoint_content' ] );
+		add_filter( 'woocommerce_account_menu_items', [ $this, 'contracts_my_account_menu_items' ] );
+
+	}
+
+	function contracts_my_account_menu_items( $items ) {
+		$logout = $items['customer-logout'];
+		unset( $items['customer-logout'] );
+
+		$items['contracts']       = esc_html__( 'Contracts', 'keevault' );
+		$items['customer-logout'] = $logout;
+
+		return $items;
+	}
+
+	// Content for the contracts endpoint
+	public function contracts_endpoint_content(): void {
+		global $wpdb;
+
+		// Define the table name
+		$table_name = $wpdb->prefix . 'keevault_contracts';
+
+		// Query to fetch all data from the table
+		$results = $wpdb->get_results( $wpdb->prepare(
+			"SELECT id, order_id, name, contract_key, created_at FROM $table_name WHERE user_id = %d",
+			get_current_user_id()
+		), ARRAY_A );
+
+		// Check if there are any records
+		if ( ! empty( $results ) ) {
+			echo '<h3>' . esc_html__( 'Contracts Information', 'keevault' ) . '</h3>';
+
+			// Start the WooCommerce-like table structure
+			echo '<table class="woocommerce-orders-table woocommerce-orders-table--contracts shop_table shop_table_responsive">';
+			echo '<thead>';
+			echo '<tr>';
+			echo '<th class="woocommerce-orders-table__header woocommerce-orders-table__header-order-id"><span class="nobr">' . esc_html__( 'Contract ID', 'keevault' ) . '</span></th>';
+			echo '<th class="woocommerce-orders-table__header woocommerce-orders-table__header-item-id"><span class="nobr">' . esc_html__( 'Order ID', 'keevault' ) . '</span></th>';
+			echo '<th class="woocommerce-orders-table__header woocommerce-orders-table__header-name"><span class="nobr">' . esc_html__( 'Name', 'keevault' ) . '</span></th>';
+			echo '<th class="woocommerce-orders-table__header woocommerce-orders-table__header-contract-key"><span class="nobr">' . esc_html__( 'Contract Key', 'keevault' ) . '</span></th>';
+			echo '<th class="woocommerce-orders-table__header woocommerce-orders-table__header-created"><span class="nobr">' . esc_html__( 'Created At', 'keevault' ) . '</span></th>';
+			echo '</tr>';
+			echo '</thead>';
+
+			echo '<tbody>';
+			// Loop through the results and output each row in the table
+			foreach ( $results as $row ) {
+				$created_at = ( ! empty( $row['created_at'] ) ) ? date_i18n( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), strtotime( $row['created_at'] ) ) : '';
+
+				echo '<tr class="woocommerce-orders-table__row">';
+				echo '<td class="woocommerce-orders-table__cell woocommerce-orders-table__cell-order-id">' . esc_html( $row['id'] ) . '</td>';
+				echo '<td class="woocommerce-orders-table__cell woocommerce-orders-table__cell-item-id">' . esc_html( $row['order_id'] ) . '</td>';
+				echo '<td class="woocommerce-orders-table__cell woocommerce-orders-table__cell-name">' . esc_html( $row['name'] ) . '</td>';
+				echo '<td class="woocommerce-orders-table__cell woocommerce-orders-table__cell-contract-key">' . esc_html( $row['contract_key'] ) . '</td>';
+				echo '<td class="woocommerce-orders-table__cell woocommerce-orders-table__cell-created">' . esc_html( $created_at ) . '</td>';
+				echo '</tr>';
+			}
+
+			echo '</tbody>';
+			echo '</table>';
+		} else {
+			echo '<p>' . esc_html__( 'No contracts found.', 'keevault' ) . '</p>';
+		}
+	}
+
+	// Register new endpoint for My Account
+	public function contracts_my_account_endpoint(): void {
+		add_rewrite_endpoint( 'contracts', EP_ROOT | EP_PAGES );
+	}
+
+
+	// Ensure endpoint is available on My Account page
+	public function contracts_query_vars( $vars ) {
+		$vars[] = 'contracts';
+
+		return $vars;
 	}
 
 	public function add_keevault_menu(): void {
@@ -129,23 +209,21 @@ class Keevault_LM_Contracts_WC_Integration {
 	public function create_contract_on_order( $order_id ): void {
 		$order = wc_get_order( $order_id );
 
-		if ( in_array( $order->get_status(), [ 'processing', 'completed' ] ) ) {
-			$api_key = get_option( 'keevault_lm_contracts_api_key' );
-			$api_url = get_option( 'keevault_lm_contracts_api_url' );
+		$api_key = get_option( 'keevault_lm_contracts_api_key' );
+		$api_url = get_option( 'keevault_lm_contracts_api_url' );
 
-			foreach ( $order->get_items() as $item ) {
-				$product_id   = $item->get_product_id();
-				$variation_id = $item->get_variation_id();
+		foreach ( $order->get_items() as $item ) {
+			$product_id   = $item->get_product_id();
+			$variation_id = $item->get_variation_id();
 
-				// Get Keevault details for either simple or variation product
-				$keevault_product_id = $variation_id ? get_post_meta( $variation_id, '_keevault_product_id', true ) : get_post_meta( $product_id, '_keevault_product_id', true );
-				$license_quantity    = $variation_id ? get_post_meta( $variation_id, '_keevault_license_quantity', true ) : get_post_meta( $product_id, '_keevault_license_quantity', true );
+			// Get Keevault details for either simple or variation product
+			$keevault_product_id = $variation_id ? get_post_meta( $variation_id, '_keevault_product_id', true ) : get_post_meta( $product_id, '_keevault_product_id', true );
+			$license_quantity    = $variation_id ? get_post_meta( $variation_id, '_keevault_license_quantity', true ) : get_post_meta( $product_id, '_keevault_license_quantity', true );
 
-				if ( $keevault_product_id && $license_quantity ) {
-					for ( $i = 1; $i <= $item->get_quantity(); $i ++ ) {
-						if ( ! $this->contracts_created( $order_id, $item->get_id(), $i ) ) {
-							$this->create_keevault_contract( $api_key, $api_url, $keevault_product_id, $license_quantity, $order, $item->get_id(), $i );
-						}
+			if ( $keevault_product_id && $license_quantity ) {
+				for ( $i = 1; $i <= $item->get_quantity(); $i ++ ) {
+					if ( ! $this->contracts_created( $order_id, $item->get_id(), $i ) ) {
+						$this->create_keevault_contract( $api_key, $api_url, $keevault_product_id, $license_quantity, $order, $item->get_id(), $i );
 					}
 				}
 			}
@@ -160,8 +238,8 @@ class Keevault_LM_Contracts_WC_Integration {
 			'license_keys_quantity' => $license_quantity,
 
 			'contract_key'         => $this->uuid(),
-			'contract_name'        => 'Order #' . $order->get_id(),
-			'contract_information' => 'Order #' . $order->get_id(),
+			'contract_name'        => 'Contract ' . $order->get_id() . $item_id . $item_number,
+			'contract_information' => sprintf( esc_html__( 'Contract create through the WooCommerce integration plugin for Order #%d', 'keevault' ), $order->get_id() ),
 			'status'               => 'active',
 			'can_get_info'         => '1',
 			'can_generate'         => '1',
@@ -191,6 +269,7 @@ class Keevault_LM_Contracts_WC_Integration {
 			$response_body['response']['contract']['order_id']    = $order->get_id();
 			$response_body['response']['contract']['item_id']     = $item_id;
 			$response_body['response']['contract']['item_number'] = $item_number;
+			$response_body['response']['contract']['user_id']     = get_current_user_id();
 			unset( $response_body['response']['contract']['license_keys_count'] );
 
 			$wpdb->insert( $wpdb->prefix . 'keevault_contracts', $response_body['response']['contract'] );
@@ -214,6 +293,9 @@ class Keevault_LM_Contracts_WC_Integration {
 
 	// Register activation hook for creating the database table
 	public static function activate() {
+		add_rewrite_endpoint( 'contracts', EP_ROOT | EP_PAGES );
+		flush_rewrite_rules(); // Flush rewrite rules
+
 		global $wpdb;
 
 		$table_name      = $wpdb->prefix . 'keevault_contracts';
@@ -224,6 +306,7 @@ class Keevault_LM_Contracts_WC_Integration {
 		            order_id INT UNSIGNED NOT NULL,
 		            item_id INT UNSIGNED NOT NULL,
 		            item_number INT UNSIGNED NOT NULL,
+		            user_id INT UNSIGNED NOT NULL,
 		            name VARCHAR(255) COLLATE utf8mb4_unicode_ci NOT NULL,
 		            information TEXT COLLATE utf8mb4_unicode_ci NOT NULL,
 		            contract_key VARCHAR(255) COLLATE utf8mb4_unicode_ci NOT NULL,
