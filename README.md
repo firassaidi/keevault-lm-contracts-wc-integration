@@ -2,6 +2,11 @@
 
 This is a WordPress plugin designed to integrate Keevault License Manager with WooCommerce. It automatically creates contracts on Keevault when WooCommerce products are purchased, allowing for license management directly from WooCommerce.
 
+## Requirements
+
+- [Keevault - Software License Manager and Telemetry Data Collection](https://codecanyon.net/item/keevault-license-manager-and-telemetry-data-collection/51172292) (Available on CodeCanyon)
+
+
 ## Features
 
 - **API Integration**: Seamlessly integrates Keevault with WooCommerce using Keevault API keys and URL configuration.
