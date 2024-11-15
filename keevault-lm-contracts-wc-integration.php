@@ -2,7 +2,7 @@
 /*
 Plugin Name: Keevault License Manager - Contracts WooCommerce Integration
 Description: Creates Keevault contracts when WooCommerce products are purchased.
-Version: 1.0
+Version: 1.0.1
 Author: Firas Saidi
 */
 
@@ -35,9 +35,76 @@ class Keevault_LM_Contracts_WC_Integration {
 		add_action( 'woocommerce_account_contracts_endpoint', [ $this, 'contracts_endpoint_content' ] );
 		add_filter( 'woocommerce_account_menu_items', [ $this, 'contracts_my_account_menu_items' ] );
 
+		// Show contract details on the order details page
+		add_action( 'woocommerce_after_order_details', [ $this, 'show_contract_details_on_the_order_page' ] );
+		add_action( 'wp_ajax_get_contract_details', [ $this, 'get_contract_details' ] );
 	}
 
-	function contracts_my_account_menu_items( $items ) {
+	public function show_contract_details_on_the_order_page( $order ): void {
+		// Enqueue the JavaScript for AJAX
+		wp_enqueue_script( 'show-contract-details-js', plugin_dir_url( __FILE__ ) . 'assests/js/show-contract-details.js', array( 'jquery' ), '1.0', true );
+
+		// Pass order ID and AJAX URL to JavaScript
+		wp_localize_script( 'show-contract-details-js', 'contractDetailsData', array(
+			'ajax_url' => admin_url( 'admin-ajax.php' ),
+			'order_id' => $order->get_id(),
+		) );
+
+		// Add a container where contract details will be displayed
+		echo '<h2>' . esc_html__( 'Contract Details', 'keevault' ) . '</h2>';
+		echo '<div id="contract-details-container">' . esc_html__( 'Loading contract details...', 'keevault' ) . '</div>';
+	}
+
+	public function get_contract_details(): void {
+		global $wpdb;
+
+		// Verify that the user is logged in
+		if ( ! is_user_logged_in() ) {
+			wp_send_json_error( esc_html__( 'You do not have permission to view this content.', 'keevault' ) );
+		}
+
+		// Get the current user ID
+		$current_user_id = get_current_user_id();
+
+		// Get order ID from AJAX request
+		$order_id = isset( $_POST['order_id'] ) ? intval( $_POST['order_id'] ) : 0;
+
+		// Return error if no valid order ID
+		if ( ! $order_id ) {
+			wp_send_json_error( esc_html__( 'Invalid order ID.', 'keevault' ) );
+		}
+
+		// Get the order object
+		$order = wc_get_order( $order_id );
+
+		// Check if the order exists
+		if ( ! $order ) {
+			wp_send_json_error( esc_html__( 'Order not found.', 'keevault' ) );
+		}
+
+		// Check if the current user is either an admin or the order owner
+		if ( ! current_user_can( 'manage_woocommerce' ) && $order->get_user_id() !== $current_user_id ) {
+			wp_send_json_error( esc_html__( 'You do not have permission to view this content.', 'keevault' ) );
+		}
+
+		// Query the table for contract data related to the order
+		$table_name = $wpdb->prefix . 'keevault_contracts';
+		$contracts = $wpdb->get_results( $wpdb->prepare(
+			"SELECT * FROM $table_name WHERE order_id = %d",
+			$order_id
+		) );
+
+		// Check if contracts were found
+		if ( ! $contracts ) {
+			wp_send_json_error( esc_html__( 'No contracts found for this order.', 'keevault' ) );
+		}
+
+		// Return contract data as JSON
+		wp_send_json_success( $contracts );
+	}
+
+
+	public function contracts_my_account_menu_items( $items ) {
 		$logout = $items['customer-logout'];
 		unset( $items['customer-logout'] );
 
@@ -82,11 +149,11 @@ class Keevault_LM_Contracts_WC_Integration {
 				$created_at = ( ! empty( $row['created_at'] ) ) ? date_i18n( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), strtotime( $row['created_at'] ) ) : '';
 
 				echo '<tr class="woocommerce-orders-table__row">';
-				echo '<td class="woocommerce-orders-table__cell woocommerce-orders-table__cell-order-id">' . esc_html( $row['id'] ) . '</td>';
-				echo '<td class="woocommerce-orders-table__cell woocommerce-orders-table__cell-item-id">' . esc_html( $row['order_id'] ) . '</td>';
-				echo '<td class="woocommerce-orders-table__cell woocommerce-orders-table__cell-name">' . esc_html( $row['name'] ) . '</td>';
-				echo '<td class="woocommerce-orders-table__cell woocommerce-orders-table__cell-contract-key">' . esc_html( $row['contract_key'] ) . '</td>';
-				echo '<td class="woocommerce-orders-table__cell woocommerce-orders-table__cell-created">' . esc_html( $created_at ) . '</td>';
+				echo '<td class="woocommerce-orders-table__cell woocommerce-orders-table__cell-order-id">' . esc_html__( $row['id'] ) . '</td>';
+				echo '<td class="woocommerce-orders-table__cell woocommerce-orders-table__cell-item-id">' . esc_html__( $row['order_id'] ) . '</td>';
+				echo '<td class="woocommerce-orders-table__cell woocommerce-orders-table__cell-name">' . esc_html__( $row['name'] ) . '</td>';
+				echo '<td class="woocommerce-orders-table__cell woocommerce-orders-table__cell-contract-key">' . esc_html__( $row['contract_key'] ) . '</td>';
+				echo '<td class="woocommerce-orders-table__cell woocommerce-orders-table__cell-created">' . esc_html__( $created_at ) . '</td>';
 				echo '</tr>';
 			}
 
