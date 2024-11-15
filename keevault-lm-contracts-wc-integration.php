@@ -42,7 +42,7 @@ class Keevault_LM_Contracts_WC_Integration {
 
 	public function show_contract_details_on_the_order_page( $order ): void {
 		// Enqueue the JavaScript for AJAX
-		wp_enqueue_script( 'show-contract-details-js', plugin_dir_url( __FILE__ ) . 'assests/js/show-contract-details.js', array( 'jquery' ), '1.0', true );
+		wp_enqueue_script( 'show-contract-details-js', plugin_dir_url( __FILE__ ) . 'assets/js/show-contract-details.js', array( 'jquery' ), '1.0', true );
 
 		// Pass order ID and AJAX URL to JavaScript
 		wp_localize_script( 'show-contract-details-js', 'contractDetailsData', array(
