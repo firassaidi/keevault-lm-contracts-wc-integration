@@ -46,8 +46,14 @@ class Keevault_LM_Contracts_WC_Integration {
 
 		// Pass order ID and AJAX URL to JavaScript
 		wp_localize_script( 'show-contract-details-js', 'contractDetailsData', array(
-			'ajax_url' => admin_url( 'admin-ajax.php' ),
-			'order_id' => $order->get_id(),
+			'ajax_url'              => admin_url( 'admin-ajax.php' ),
+			'order_id'              => $order->get_id(),
+			'no_contracts_found'    => esc_html__( 'No contract details available for this order.', 'keevault' ),
+			'contrat_name'          => esc_html__( 'Name', 'keevault' ),
+			'contract_key'          => esc_html__( 'Contract Key', 'keevault' ),
+			'license_keys_quantity' => esc_html__( 'License Keys Quantity', 'keevault' ),
+			'contract_status'       => esc_html__( 'Status', 'keevault' ),
+			'failed_to_load'        => esc_html__( 'Failed to load contract details. Please try again later.', 'keevault' ),
 		) );
 
 		// Add a container where contract details will be displayed
@@ -89,7 +95,7 @@ class Keevault_LM_Contracts_WC_Integration {
 
 		// Query the table for contract data related to the order
 		$table_name = $wpdb->prefix . 'keevault_contracts';
-		$contracts = $wpdb->get_results( $wpdb->prepare(
+		$contracts  = $wpdb->get_results( $wpdb->prepare(
 			"SELECT * FROM $table_name WHERE order_id = %d",
 			$order_id
 		) );
@@ -149,11 +155,11 @@ class Keevault_LM_Contracts_WC_Integration {
 				$created_at = ( ! empty( $row['created_at'] ) ) ? date_i18n( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), strtotime( $row['created_at'] ) ) : '';
 
 				echo '<tr class="woocommerce-orders-table__row">';
-				echo '<td class="woocommerce-orders-table__cell woocommerce-orders-table__cell-order-id">' . esc_html__( $row['id'] ) . '</td>';
-				echo '<td class="woocommerce-orders-table__cell woocommerce-orders-table__cell-item-id">' . esc_html__( $row['order_id'] ) . '</td>';
-				echo '<td class="woocommerce-orders-table__cell woocommerce-orders-table__cell-name">' . esc_html__( $row['name'] ) . '</td>';
-				echo '<td class="woocommerce-orders-table__cell woocommerce-orders-table__cell-contract-key">' . esc_html__( $row['contract_key'] ) . '</td>';
-				echo '<td class="woocommerce-orders-table__cell woocommerce-orders-table__cell-created">' . esc_html__( $created_at ) . '</td>';
+				echo '<td class="woocommerce-orders-table__cell woocommerce-orders-table__cell-order-id">' . esc_html( $row['id'] ) . '</td>';
+				echo '<td class="woocommerce-orders-table__cell woocommerce-orders-table__cell-item-id">' . esc_html( $row['order_id'] ) . '</td>';
+				echo '<td class="woocommerce-orders-table__cell woocommerce-orders-table__cell-name">' . esc_html( $row['name'] ) . '</td>';
+				echo '<td class="woocommerce-orders-table__cell woocommerce-orders-table__cell-contract-key">' . esc_html( $row['contract_key'] ) . '</td>';
+				echo '<td class="woocommerce-orders-table__cell woocommerce-orders-table__cell-created">' . esc_html( $created_at ) . '</td>';
 				echo '</tr>';
 			}
 

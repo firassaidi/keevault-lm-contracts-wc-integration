@@ -13,10 +13,10 @@ jQuery(document).ready(function($) {
                 <table class="shop_table woocommerce-table" style="width: 100%;">
                     <thead>
                         <tr>
-                            <th class="woocommerce-table__header" style="padding: 12px; text-align: left;">Name</th>
-                            <th class="woocommerce-table__header" style="padding: 12px; text-align: left;">Contract Key</th>
-                            <th class="woocommerce-table__header" style="padding: 12px; text-align: center;">License Keys Quantity</th>
-                            <th class="woocommerce-table__header" style="padding: 12px; text-align: center;">Status</th>
+                            <th class="woocommerce-table__header" style="padding: 12px; text-align: left;">${contractDetailsData.contrat_name}</th>
+                            <th class="woocommerce-table__header" style="padding: 12px; text-align: left;">${contractDetailsData.contract_key}</th>
+                            <th class="woocommerce-table__header" style="padding: 12px; text-align: center;">${contractDetailsData.license_keys_quantity}</th>
+                            <th class="woocommerce-table__header" style="padding: 12px; text-align: center;">${contractDetailsData.contract_status}</th>
                         </tr>
                     </thead>
                     <tbody class="woocommerce-table__body">`;
@@ -40,10 +40,10 @@ jQuery(document).ready(function($) {
                 // Insert the table into the container
                 container.html(contractHtml);
             } else {
-                container.html('<p>No contract details available for this order.</p>');
+                container.html(`<p>${contractDetailsData.no_contracts_found}</p>`);
             }
         })
         .fail(function() {
-            container.html('<p>Failed to load contract details. Please try again later.</p>');
+            container.html(`<p>${contractDetailsData.failed_to_load}</p>`);
         });
 });
