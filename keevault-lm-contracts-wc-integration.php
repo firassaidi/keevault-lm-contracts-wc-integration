@@ -2,7 +2,7 @@
 /*
 Plugin Name: Keevault License Manager - Contracts WooCommerce Integration
 Description: Creates Keevault contracts when WooCommerce products are purchased.
-Version: 1.0.1
+Version: 1.0.2
 Author: Firas Saidi
 */
 
@@ -48,8 +48,9 @@ class Keevault_LM_Contracts_WC_Integration {
 		wp_localize_script( 'show-contract-details-js', 'contractDetailsData', array(
 			'ajax_url'              => admin_url( 'admin-ajax.php' ),
 			'order_id'              => $order->get_id(),
+			'contract_id'           => esc_html__( 'ID', 'keevault' ),
 			'no_contracts_found'    => esc_html__( 'No contract details available for this order.', 'keevault' ),
-			'contrat_name'          => esc_html__( 'Name', 'keevault' ),
+			'contract_name'         => esc_html__( 'Name', 'keevault' ),
 			'contract_key'          => esc_html__( 'Contract Key', 'keevault' ),
 			'license_keys_quantity' => esc_html__( 'License Keys Quantity', 'keevault' ),
 			'contract_status'       => esc_html__( 'Status', 'keevault' ),
@@ -129,7 +130,7 @@ class Keevault_LM_Contracts_WC_Integration {
 
 		// Query to fetch all data from the table
 		$results = $wpdb->get_results( $wpdb->prepare(
-			"SELECT id, order_id, name, contract_key, created_at FROM $table_name WHERE user_id = %d",
+			"SELECT id, order_id, name, contract_key, license_keys_quantity, created_at FROM $table_name WHERE user_id = %d",
 			get_current_user_id()
 		), ARRAY_A );
 
@@ -141,10 +142,11 @@ class Keevault_LM_Contracts_WC_Integration {
 			echo '<table class="woocommerce-orders-table woocommerce-orders-table--contracts shop_table shop_table_responsive">';
 			echo '<thead>';
 			echo '<tr>';
-			echo '<th class="woocommerce-orders-table__header woocommerce-orders-table__header-order-id"><span class="nobr">' . esc_html__( 'Contract ID', 'keevault' ) . '</span></th>';
+			echo '<th class="woocommerce-orders-table__header woocommerce-orders-table__header-order-id"><span class="nobr">' . esc_html__( 'ID', 'keevault' ) . '</span></th>';
 			echo '<th class="woocommerce-orders-table__header woocommerce-orders-table__header-item-id"><span class="nobr">' . esc_html__( 'Order ID', 'keevault' ) . '</span></th>';
 			echo '<th class="woocommerce-orders-table__header woocommerce-orders-table__header-name"><span class="nobr">' . esc_html__( 'Name', 'keevault' ) . '</span></th>';
 			echo '<th class="woocommerce-orders-table__header woocommerce-orders-table__header-contract-key"><span class="nobr">' . esc_html__( 'Contract Key', 'keevault' ) . '</span></th>';
+			echo '<th class="woocommerce-orders-table__header woocommerce-orders-table__header-contract-key"><span class="nobr">' . esc_html__( 'License Keys Quantity', 'keevault' ) . '</span></th>';
 			echo '<th class="woocommerce-orders-table__header woocommerce-orders-table__header-created"><span class="nobr">' . esc_html__( 'Created At', 'keevault' ) . '</span></th>';
 			echo '</tr>';
 			echo '</thead>';
@@ -159,6 +161,7 @@ class Keevault_LM_Contracts_WC_Integration {
 				echo '<td class="woocommerce-orders-table__cell woocommerce-orders-table__cell-item-id">' . esc_html( $row['order_id'] ) . '</td>';
 				echo '<td class="woocommerce-orders-table__cell woocommerce-orders-table__cell-name">' . esc_html( $row['name'] ) . '</td>';
 				echo '<td class="woocommerce-orders-table__cell woocommerce-orders-table__cell-contract-key">' . esc_html( $row['contract_key'] ) . '</td>';
+				echo '<td class="woocommerce-orders-table__cell woocommerce-orders-table__cell-contract-key">' . esc_html( $row['license_keys_quantity'] ) . '</td>';
 				echo '<td class="woocommerce-orders-table__cell woocommerce-orders-table__cell-created">' . esc_html( $created_at ) . '</td>';
 				echo '</tr>';
 			}
