@@ -2,20 +2,21 @@
 /*
 Plugin Name: Keevault License Manager - Contracts WooCommerce Integration
 Description: Creates Keevault contracts when WooCommerce products are purchased.
-Version: 1.0.2
+Version: 1.0.3
 Author: Firas Saidi
 */
 
-if ( ! defined( 'ABSPATH' ) ) {
-	exit;
-}
+defined( 'ABSPATH' ) || exit;
+defined( 'KEEVAULT_LM_CONTRACTS' ) || define( 'KEEVAULT_LM_CONTRACTS', __DIR__ );
 
 class Keevault_LM_Contracts_WC_Integration {
 
 	public function __construct() {
-		// Initialize Keevault Settings menu and fields
-		add_action( 'admin_menu', [ $this, 'add_keevault_menu' ] );
-		add_action( 'admin_init', [ $this, 'keevault_settings_init' ] );
+		// If the settings menu and fields were not already added by another Keevault plugin, add them.
+		if ( ! defined( 'KEEVAULT_LM' ) ) {
+			add_action( 'admin_menu', [ $this, 'add_keevault_menu' ] );
+			add_action( 'admin_init', [ $this, 'keevault_settings_init' ] );
+		}
 
 		// Product-specific Keevault settings
 		add_action( 'woocommerce_product_options_general_product_data', [ $this, 'add_keevault_product_settings' ] );
@@ -128,10 +129,28 @@ class Keevault_LM_Contracts_WC_Integration {
 		// Define the table name
 		$table_name = $wpdb->prefix . 'keevault_contracts';
 
-		// Query to fetch all data from the table
-		$results = $wpdb->get_results( $wpdb->prepare(
-			"SELECT id, order_id, name, contract_key, license_keys_quantity, created_at FROM $table_name WHERE user_id = %d",
+		// Get the current page from the URL (default to 1 if not set)
+		$current_page = isset( $_GET['contracts-page'] ) ? max( 1, intval( $_GET['contracts-page'] ) ) : 1;
+		$per_page     = 10; // Number of contracts per page
+
+		// Calculate the offset for the SQL query
+		$offset = ( $current_page - 1 ) * $per_page;
+
+		// Query to fetch total number of records for pagination
+		$total_count = $wpdb->get_var( $wpdb->prepare(
+			"SELECT COUNT(*) FROM $table_name WHERE user_id = %d",
 			get_current_user_id()
+		) );
+
+		// Query to fetch paginated data from the table
+		$results = $wpdb->get_results( $wpdb->prepare(
+			"SELECT id, order_id, name, contract_key, license_keys_quantity, created_at 
+        FROM $table_name 
+        WHERE user_id = %d 
+        LIMIT %d OFFSET %d",
+			get_current_user_id(),
+			$per_page,
+			$offset
 		), ARRAY_A );
 
 		// Check if there are any records
@@ -168,10 +187,57 @@ class Keevault_LM_Contracts_WC_Integration {
 
 			echo '</tbody>';
 			echo '</table>';
+
+			// Pagination logic using WooCommerce's pagination function
+			$total_pages = ceil( $total_count / $per_page );
+
+			// Only show pagination if there are multiple pages
+			if ( $total_pages > 1 ) {
+				// Define previous and next page URLs
+				$prev_link = $current_page > 1 ? esc_url( add_query_arg( 'contracts-page', $current_page - 1 ) ) : '';
+				$next_link = $current_page < $total_pages ? esc_url( add_query_arg( 'contracts-page', $current_page + 1 ) ) : '';
+
+				// Display pagination buttons
+				echo '<div class="woocommerce-pagination">';
+
+				// Previous page button
+				if ( $prev_link ) {
+					echo '<a class="woocommerce-button button" href="' . $prev_link . '">' . __( 'Previous', 'keevault' ) . '</a>';
+				}
+
+				// Page numbers logic
+				$start_page = max( 1, $current_page - 1 ); // Start from 1 or 1 page before current page
+				$end_page   = min( $total_pages, $current_page + 1 ); // End at current page + 1 or the total number of pages
+
+				// Adjust the range if the current page is near the beginning or end
+				if ( $current_page == 1 ) {
+					$end_page = min( 3, $total_pages ); // If we're on the first page, show the first 3 pages
+				}
+				if ( $current_page == $total_pages ) {
+					$start_page = max( $total_pages - 2, 1 ); // If we're on the last page, show the last 3 pages
+				}
+
+				// Loop through the pages and display the page numbers (3 pages at most)
+				for ( $i = $start_page; $i <= $end_page; $i ++ ) {
+					// Highlight the current page
+					$current = ( $i == $current_page ) ? ' style="background-color: #ddd;"' : '';
+
+					// Output page number link
+					echo '<a class="woocommerce-button button"' . $current . ' href="' . esc_url( add_query_arg( 'contracts-page', $i ) ) . '">' . $i . '</a>';
+				}
+
+				// Next page button
+				if ( $next_link ) {
+					echo '<a class="woocommerce-button button" href="' . $next_link . '">' . __( 'Next', 'keevault' ) . '</a>';
+				}
+
+				echo '</div>';
+			}
 		} else {
 			echo '<p>' . esc_html__( 'No contracts found.', 'keevault' ) . '</p>';
 		}
 	}
+
 
 	// Register new endpoint for My Account
 	public function contracts_my_account_endpoint(): void {
@@ -188,38 +254,38 @@ class Keevault_LM_Contracts_WC_Integration {
 
 	public function add_keevault_menu(): void {
 		add_menu_page(
-			'Keevault Settings',
+			esc_html__( 'Keevault Contracts Settings', 'keevault' ),
 			'Keevault',
 			'manage_options',
-			'keevault_lm_contracts_',
+			'keevault-contracts-settings',
 			[ $this, 'keevault_settings_page' ],
 			'dashicons-admin-network'
 		);
 	}
 
 	public function keevault_settings_init(): void {
-		register_setting( 'keevault_lm_contracts_settings', 'keevault_lm_contracts_api_key' );
-		register_setting( 'keevault_lm_contracts_settings', 'keevault_lm_contracts_api_url' );
+		register_setting( 'keevault_lm_settings', 'keevault_lm_api_key' );
+		register_setting( 'keevault_lm_settings', 'keevault_lm_api_url' );
 
-		add_settings_section( 'keevault_lm_contracts_global_section', esc_html__( 'Keevault API Configuration', 'woocommerce' ), null, 'keevault_lm_contracts_settings' );
+		add_settings_section( 'keevault_lm_contracts_global_section', esc_html__( 'Keevault API Configuration', 'keevault' ), null, 'keevault_lm_settings' );
 
-		add_settings_field( 'keevault_lm_contracts_api_key', esc_html__( 'API Key', 'woocommerce' ), function () {
-			$keevault_lm_contracts_api_key = get_option( 'keevault_lm_contracts_api_key' );
-			echo "<input type='text' name='keevault_lm_contracts_api_key' value='{$keevault_lm_contracts_api_key}' />";
-		}, 'keevault_lm_contracts_settings', 'keevault_lm_contracts_global_section' );
+		add_settings_field( 'keevault_lm_api_key', esc_html__( 'API Key', 'keevault' ), function () {
+			$keevault_lm_api_key = get_option( 'keevault_lm_api_key' );
+			echo "<input type='text' name='keevault_lm_api_key' value='{$keevault_lm_api_key}' />";
+		}, 'keevault_lm_settings', 'keevault_lm_contracts_global_section' );
 
-		add_settings_field( 'keevault_lm_contracts_api_url', esc_html__( 'API URL', 'woocommerce' ), function () {
-			$keevault_lm_contracts_api_url = get_option( 'keevault_lm_contracts_api_url' );
-			echo "<input type='text' name='keevault_lm_contracts_api_url' value='{$keevault_lm_contracts_api_url}' />";
-		}, 'keevault_lm_contracts_settings', 'keevault_lm_contracts_global_section' );
+		add_settings_field( 'keevault_lm_api_url', esc_html__( 'API URL', 'keevault' ), function () {
+			$keevault_lm_api_url = get_option( 'keevault_lm_api_url' );
+			echo "<input type='text' name='keevault_lm_api_url' value='{$keevault_lm_api_url}' />";
+		}, 'keevault_lm_settings', 'keevault_lm_contracts_global_section' );
 	}
 
 	public function keevault_settings_page(): void {
 		?>
 		<form action="options.php" method="post">
 			<?php
-			settings_fields( 'keevault_lm_contracts_settings' );
-			do_settings_sections( 'keevault_lm_contracts_settings' );
+			settings_fields( 'keevault_lm_settings' );
+			do_settings_sections( 'keevault_lm_settings' );
 			submit_button();
 			?>
 		</form>
@@ -231,16 +297,16 @@ class Keevault_LM_Contracts_WC_Integration {
 
 		woocommerce_wp_text_input( [
 			'id'          => '_keevault_product_id',
-			'label'       => esc_html__( 'Keevault Product ID', 'woocommerce' ),
+			'label'       => esc_html__( 'Keevault Product ID', 'keevault' ),
 			'desc_tip'    => 'true',
-			'description' => esc_html__( 'Keevault Product ID for license creation.', 'woocommerce' ),
+			'description' => esc_html__( 'Keevault Product ID for license creation.', 'keevault' ),
 		] );
 
 		woocommerce_wp_text_input( [
 			'id'                => '_keevault_license_quantity',
-			'label'             => esc_html__( 'License Keys Quantity', 'woocommerce' ),
+			'label'             => esc_html__( 'License Keys Quantity', 'keevault' ),
 			'desc_tip'          => 'true',
-			'description'       => esc_html__( 'Number of license keys to create per purchase.', 'woocommerce' ),
+			'description'       => esc_html__( 'Number of license keys to create per purchase.', 'keevault' ),
 			'type'              => 'number',
 			'custom_attributes' => [ 'min' => '1' ]
 		] );
@@ -259,15 +325,15 @@ class Keevault_LM_Contracts_WC_Integration {
 	public function add_keevault_variation_settings( $loop, $variation_data, $variation ) {
 		woocommerce_wp_text_input( [
 			'id'          => '_keevault_product_id_' . $variation->ID,
-			'label'       => esc_html__( 'Keevault Product ID', 'woocommerce' ),
-			'description' => esc_html__( 'Keevault Product ID for this variation.', 'woocommerce' ),
+			'label'       => esc_html__( 'Keevault Product ID', 'keevault' ),
+			'description' => esc_html__( 'Keevault Product ID for this variation.', 'keevault' ),
 			'value'       => get_post_meta( $variation->ID, '_keevault_product_id', true )
 		] );
 
 		woocommerce_wp_text_input( [
 			'id'                => '_keevault_license_quantity_' . $variation->ID,
-			'label'             => esc_html__( 'License Keys Quantity', 'woocommerce' ),
-			'description'       => esc_html__( 'Number of license keys to create for this variation.', 'woocommerce' ),
+			'label'             => esc_html__( 'License Keys Quantity', 'keevault' ),
+			'description'       => esc_html__( 'Number of license keys to create for this variation.', 'keevault' ),
 			'type'              => 'number',
 			'custom_attributes' => [ 'min' => '1' ],
 			'value'             => get_post_meta( $variation->ID, '_keevault_license_quantity', true )
@@ -285,8 +351,8 @@ class Keevault_LM_Contracts_WC_Integration {
 	public function create_contract_on_order( $order_id ): void {
 		$order = wc_get_order( $order_id );
 
-		$api_key = get_option( 'keevault_lm_contracts_api_key' );
-		$api_url = get_option( 'keevault_lm_contracts_api_url' );
+		$api_key = get_option( 'keevault_lm_api_key' );
+		$api_url = get_option( 'keevault_lm_api_url' );
 
 		foreach ( $order->get_items() as $item ) {
 			$product_id   = $item->get_product_id();
