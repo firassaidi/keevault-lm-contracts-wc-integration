@@ -2,7 +2,7 @@
 /*
 Plugin Name: Keevault License Manager - Contracts WooCommerce Integration
 Description: Creates Keevault contracts when WooCommerce products are purchased.
-Version: 1.0.3
+Version: 1.0.4
 Author: Firas Saidi
 */
 
@@ -26,7 +26,7 @@ class Keevault_LM_Contracts_WC_Integration {
 		add_action( 'woocommerce_product_after_variable_attributes', [ $this, 'add_keevault_variation_settings' ], 10, 3 );
 		add_action( 'woocommerce_save_product_variation', [ $this, 'save_keevault_variation_settings' ], 10, 2 );
 
-		// Order Hook for license creation
+		// Order Hook for contract creation
 		add_action( 'woocommerce_order_status_processing', [ $this, 'create_contract_on_order' ] );
 		add_action( 'woocommerce_order_status_completed', [ $this, 'create_contract_on_order' ] );
 
@@ -254,38 +254,75 @@ class Keevault_LM_Contracts_WC_Integration {
 
 	public function add_keevault_menu(): void {
 		add_menu_page(
-			esc_html__( 'Keevault Contracts Settings', 'keevault' ),
-			'Keevault',
+			esc_html__( 'Keevault', 'keevault' ),
+			esc_html__( 'Keevault', 'keevault' ),
+			'manage_options',
+			'keevault-contracts',
+			[ $this, 'contracts_page' ],
+			'dashicons-admin-network',
+			30
+		);
+
+		add_submenu_page(
+			'keevault-contracts',
+			esc_html__( 'Contracts', 'keevault' ),
+			esc_html__( 'Contracts', 'keevault' ),
+			'manage_options',
+			'keevault-contracts',
+			[ $this, 'contracts_page' ],
+			40
+		);
+
+		add_submenu_page(
+			'keevault-contracts',
+			esc_html__( 'Settings', 'keevault' ),
+			esc_html__( 'Settings', 'keevault' ),
 			'manage_options',
 			'keevault-contracts-settings',
-			[ $this, 'keevault_settings_page' ],
-			'dashicons-admin-network'
+			[ $this, 'settings_page' ],
+			50
 		);
 	}
 
 	public function keevault_settings_init(): void {
-		register_setting( 'keevault_lm_settings', 'keevault_lm_api_key' );
-		register_setting( 'keevault_lm_settings', 'keevault_lm_api_url' );
+		register_setting( 'keevault_lm_api_settings', 'keevault_lm_api_key' );
+		register_setting( 'keevault_lm_api_settings', 'keevault_lm_api_url' );
 
-		add_settings_section( 'keevault_lm_contracts_global_section', esc_html__( 'Keevault API Configuration', 'keevault' ), null, 'keevault_lm_settings' );
+		add_settings_section( 'keevault_lm_api_section', esc_html__( 'Keevault API Configuration', 'keevault' ), null, 'keevault_lm_api_settings' );
 
-		add_settings_field( 'keevault_lm_api_key', esc_html__( 'API Key', 'keevault' ), function () {
-			$keevault_lm_api_key = get_option( 'keevault_lm_api_key' );
-			echo "<input type='text' name='keevault_lm_api_key' value='{$keevault_lm_api_key}' />";
-		}, 'keevault_lm_settings', 'keevault_lm_contracts_global_section' );
+		add_settings_field(
+			'keevault_lm_api_key',
+			esc_html__( 'API Key', 'keevault' ),
+			function () {
+				$keevault_lm_api_key = get_option( 'keevault_lm_api_key' );
+				echo "<input type='text' class='regular-text' name='keevault_lm_api_key' value='{$keevault_lm_api_key}' />";
+			},
+			'keevault_lm_api_settings',
+			'keevault_lm_api_section',
+		);
 
-		add_settings_field( 'keevault_lm_api_url', esc_html__( 'API URL', 'keevault' ), function () {
-			$keevault_lm_api_url = get_option( 'keevault_lm_api_url' );
-			echo "<input type='text' name='keevault_lm_api_url' value='{$keevault_lm_api_url}' />";
-		}, 'keevault_lm_settings', 'keevault_lm_contracts_global_section' );
+		add_settings_field(
+			'keevault_lm_api_url',
+			esc_html__( 'API URL', 'keevault' ),
+			function () {
+				$keevault_lm_api_url = get_option( 'keevault_lm_api_url' );
+				echo "<input type='text' class='regular-text' name='keevault_lm_api_url' value='{$keevault_lm_api_url}' />";
+			},
+			'keevault_lm_api_settings',
+			'keevault_lm_api_section'
+		);
 	}
 
-	public function keevault_settings_page(): void {
+	public function contracts_page(): void {
+		include KEEVAULT_LM_CONTRACTS . '/dashboard/pages/contracts.php';
+	}
+
+	public function settings_page(): void {
 		?>
 		<form action="options.php" method="post">
 			<?php
-			settings_fields( 'keevault_lm_settings' );
-			do_settings_sections( 'keevault_lm_settings' );
+			settings_fields( 'keevault_lm_api_settings' );
+			do_settings_sections( 'keevault_lm_api_settings' );
 			submit_button();
 			?>
 		</form>
@@ -469,7 +506,15 @@ class Keevault_LM_Contracts_WC_Integration {
 	}
 }
 
-new Keevault_LM_Contracts_WC_Integration();
+function keevault_lm_contracts_integration_init(): void {
+	new Keevault_LM_Contracts_WC_Integration();
+}
+
+if ( has_action( 'keevault_init' ) ) {
+	add_action( 'keevault_init', 'keevault_lm_contracts_integration_init' );
+} else {
+	add_action( 'init', 'keevault_lm_contracts_integration_init' );
+}
 
 // Register the activation hook to create the database table
 register_activation_hook( __FILE__, [ 'Keevault_LM_Contracts_WC_Integration', 'activate' ] );
