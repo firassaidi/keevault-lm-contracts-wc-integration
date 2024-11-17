@@ -2,7 +2,7 @@
 /*
 Plugin Name: Keevault License Manager - Contracts WooCommerce Integration
 Description: Creates Keevault contracts when WooCommerce products are purchased.
-Version: 1.0.4
+Version: 1.0.5
 Author: Firas Saidi
 */
 
@@ -14,8 +14,7 @@ class Keevault_LM_Contracts_WC_Integration {
 
 	public function __construct() {
 		// Order Hook for contract creation
-		add_action( 'woocommerce_order_status_processing', [ $this, 'create_contract_on_order' ] );
-		add_action( 'woocommerce_order_status_completed', [ $this, 'create_contract_on_order' ] );
+		add_action( 'woocommerce_thankyou', [ $this, 'create_contract_on_order' ] );
 
 		if ( is_user_logged_in() ) {
 			// Add my-account endpoint
@@ -446,21 +445,23 @@ class Keevault_LM_Contracts_WC_Integration {
 	public function create_contract_on_order( $order_id ): void {
 		$order = wc_get_order( $order_id );
 
-		$api_key = get_option( 'keevault_lm_api_key' );
-		$api_url = get_option( 'keevault_lm_api_url' );
+		if ( $order->get_status() == 'processing' || $order->get_status() == 'completed' ) {
+			$api_key = get_option( 'keevault_lm_api_key' );
+			$api_url = get_option( 'keevault_lm_api_url' );
 
-		foreach ( $order->get_items() as $item ) {
-			$product_id   = $item->get_product_id();
-			$variation_id = $item->get_variation_id();
+			foreach ( $order->get_items() as $item ) {
+				$product_id   = $item->get_product_id();
+				$variation_id = $item->get_variation_id();
 
-			// Get Keevault details for either simple or variation product
-			$keevault_product_id = $variation_id ? get_post_meta( $variation_id, '_keevault_product_id', true ) : get_post_meta( $product_id, '_keevault_product_id', true );
-			$license_quantity    = $variation_id ? get_post_meta( $variation_id, '_keevault_license_quantity', true ) : get_post_meta( $product_id, '_keevault_license_quantity', true );
+				// Get Keevault details for either simple or variation product
+				$keevault_product_id = $variation_id ? get_post_meta( $variation_id, '_keevault_product_id', true ) : get_post_meta( $product_id, '_keevault_product_id', true );
+				$license_quantity    = $variation_id ? get_post_meta( $variation_id, '_keevault_license_quantity', true ) : get_post_meta( $product_id, '_keevault_license_quantity', true );
 
-			if ( $keevault_product_id && $license_quantity ) {
-				for ( $i = 1; $i <= $item->get_quantity(); $i ++ ) {
-					if ( ! $this->contracts_created( $order_id, $item->get_id(), $i ) ) {
-						$this->create_keevault_contract( $api_key, $api_url, $keevault_product_id, $license_quantity, $order, $item->get_id(), $i );
+				if ( $keevault_product_id && $license_quantity ) {
+					for ( $i = 1; $i <= $item->get_quantity(); $i ++ ) {
+						if ( ! $this->contracts_created( $order_id, $item->get_id(), $i ) ) {
+							$this->create_keevault_contract( $api_key, $api_url, $keevault_product_id, $license_quantity, $order, $item->get_id(), $i );
+						}
 					}
 				}
 			}
