@@ -8,37 +8,94 @@ Author: Firas Saidi
 
 defined( 'ABSPATH' ) || exit;
 defined( 'KEEVAULT_LM_CONTRACTS' ) || define( 'KEEVAULT_LM_CONTRACTS', __DIR__ );
+defined( 'KEEVAULT_LM_CONTRACTS_BASE' ) || define( 'KEEVAULT_LM_CONTRACTS_BASE', plugin_dir_url( __FILE__ ) );
 
 class Keevault_LM_Contracts_WC_Integration {
 
 	public function __construct() {
-		// If the settings menu and fields were not already added by another Keevault plugin, add them.
-		if ( ! defined( 'KEEVAULT_LM' ) ) {
-			add_action( 'admin_menu', [ $this, 'add_keevault_menu' ] );
-			add_action( 'admin_init', [ $this, 'keevault_settings_init' ] );
-		}
-
-		// Product-specific Keevault settings
-		add_action( 'woocommerce_product_options_general_product_data', [ $this, 'add_keevault_product_settings' ] );
-		add_action( 'woocommerce_process_product_meta', [ $this, 'save_keevault_product_settings' ] );
-
-		// Add settings for product variations
-		add_action( 'woocommerce_product_after_variable_attributes', [ $this, 'add_keevault_variation_settings' ], 10, 3 );
-		add_action( 'woocommerce_save_product_variation', [ $this, 'save_keevault_variation_settings' ], 10, 2 );
-
 		// Order Hook for contract creation
 		add_action( 'woocommerce_order_status_processing', [ $this, 'create_contract_on_order' ] );
 		add_action( 'woocommerce_order_status_completed', [ $this, 'create_contract_on_order' ] );
 
-		// Add my-account endpoint
-		add_action( 'init', [ $this, 'contracts_my_account_endpoint' ] );
-		add_filter( 'query_vars', [ $this, 'contracts_query_vars' ], 0 );
-		add_action( 'woocommerce_account_contracts_endpoint', [ $this, 'contracts_endpoint_content' ] );
-		add_filter( 'woocommerce_account_menu_items', [ $this, 'contracts_my_account_menu_items' ] );
+		if ( is_user_logged_in() ) {
+			// Add my-account endpoint
+			add_action( 'init', [ $this, 'contracts_my_account_endpoint' ] );
+			add_filter( 'query_vars', [ $this, 'contracts_query_vars' ], 0 );
+			add_action( 'woocommerce_account_contracts_endpoint', [ $this, 'contracts_endpoint_content' ] );
+			add_filter( 'woocommerce_account_menu_items', [ $this, 'contracts_my_account_menu_items' ] );
 
-		// Show contract details on the order details page
-		add_action( 'woocommerce_after_order_details', [ $this, 'show_contract_details_on_the_order_page' ] );
-		add_action( 'wp_ajax_get_contract_details', [ $this, 'get_contract_details' ] );
+			// Show contract details on the order details page
+			add_action( 'woocommerce_after_order_details', [ $this, 'show_contract_details_on_the_order_page' ] );
+			add_action( 'wp_ajax_get_contract_details', [ $this, 'get_contract_details' ] );
+		}
+
+		if ( is_admin() && current_user_can( 'manage_options' ) ) {
+			// If the settings menu and fields were not already added by another Keevault plugin, add them.
+			if ( ! defined( 'KEEVAULT_LM' ) ) {
+				add_action( 'admin_menu', [ $this, 'add_keevault_menu' ] );
+				add_action( 'admin_init', [ $this, 'keevault_settings_init' ] );
+			}
+
+			// Product-specific Keevault settings
+			add_action( 'woocommerce_product_options_general_product_data', [ $this, 'add_keevault_product_settings' ] );
+			add_action( 'woocommerce_process_product_meta', [ $this, 'save_keevault_product_settings' ] );
+
+			// Add settings for product variations
+			add_action( 'woocommerce_product_after_variable_attributes', [ $this, 'add_keevault_variation_settings' ], 10, 3 );
+			add_action( 'woocommerce_save_product_variation', [ $this, 'save_keevault_variation_settings' ], 10, 2 );
+
+			// Admin scripts
+			add_action( 'admin_enqueue_scripts', [ $this, 'admin_enqueue_scripts' ] );
+			add_action( 'wp_ajax_select2_user_search', [ $this, 'handle_ajax_user_search' ] );
+		}
+	}
+
+	public function admin_enqueue_scripts(): void {
+		// Enqueue Select2 CSS
+		wp_enqueue_style( 'select2', 'https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.13/css/select2.min.css' );
+
+		// Enqueue Select2 JS
+		wp_enqueue_script( 'select2', 'https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.13/js/select2.min.js', array( 'jquery' ), null, true );
+
+		// Enqueue the custom script for AJAX user search
+		wp_enqueue_script( 'select2-ajax-users', KEEVAULT_LM_CONTRACTS_BASE . '/assets/js/select2-ajax-users.js', array( 'jquery', 'select2' ), null, true );
+
+		// Localize the script with AJAX URL and nonce
+		wp_localize_script( 'select2-ajax-users', 'select2AjaxUsers', array(
+			'ajax_url'                => admin_url( 'admin-ajax.php' ),
+			'nonce'                   => wp_create_nonce( 'select2_users_nonce' ),
+			'select_user_placeholder' => esc_html__( 'Select User', 'keevault' ),
+		) );
+	}
+
+	public function handle_ajax_user_search(): void {
+		// Check nonce for security
+		if ( ! isset( $_POST['nonce'] ) || ! wp_verify_nonce( $_POST['nonce'], 'select2_users_nonce' ) ) {
+			die( 'Permission Denied' );
+		}
+
+		// Get the search query
+		$search_query = isset( $_POST['search'] ) ? sanitize_text_field( $_POST['search'] ) : '';
+
+		// Query users
+		$args = array(
+			'search'         => "*" . esc_attr( $search_query ) . "*",
+			'search_columns' => array( 'user_login', 'user_nicename', 'user_email', 'display_name' ),
+			'fields'         => array( 'ID', 'display_name' ),
+			'number'         => 20, // Limit to 20 results
+		);
+
+		$users   = get_users( $args );
+		$results = array();
+
+		foreach ( $users as $user ) {
+			$results[] = array(
+				'id'   => $user->ID,
+				'text' => $user->display_name,
+			);
+		}
+
+		wp_send_json_success( $results );
 	}
 
 	public function show_contract_details_on_the_order_page( $order ): void {
@@ -98,7 +155,7 @@ class Keevault_LM_Contracts_WC_Integration {
 		// Query the table for contract data related to the order
 		$table_name = $wpdb->prefix . 'keevault_contracts';
 		$contracts  = $wpdb->get_results( $wpdb->prepare(
-			"SELECT * FROM $table_name WHERE order_id = %d",
+			"SELECT * FROM $table_name WHERE order_id = %d ORDER BY id DESC",
 			$order_id
 		) );
 
@@ -147,7 +204,8 @@ class Keevault_LM_Contracts_WC_Integration {
 			"SELECT id, order_id, name, contract_key, license_keys_quantity, created_at 
         FROM $table_name 
         WHERE user_id = %d 
-        LIMIT %d OFFSET %d",
+        ORDER BY id DESC
+        LIMIT %d OFFSET %d ",
 			get_current_user_id(),
 			$per_page,
 			$offset
@@ -450,6 +508,7 @@ class Keevault_LM_Contracts_WC_Integration {
 			$response_body['response']['contract']['item_number'] = $item_number;
 			$response_body['response']['contract']['user_id']     = get_current_user_id();
 			unset( $response_body['response']['contract']['license_keys_count'] );
+			unset( $response_body['response']['contract']['id'] );
 
 			$wpdb->insert( $wpdb->prefix . 'keevault_contracts', $response_body['response']['contract'] );
 		}
