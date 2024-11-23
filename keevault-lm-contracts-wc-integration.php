@@ -2,7 +2,7 @@
 /*
 Plugin Name: Keevault License Manager - Contracts WooCommerce Integration
 Description: Creates Keevault contracts when WooCommerce products are purchased.
-Version: 1.0.5
+Version: 1.0.6
 Author: Firas Saidi
 */
 
@@ -30,8 +30,9 @@ class Keevault_LM_Contracts_WC_Integration {
 
 		if ( is_admin() && current_user_can( 'manage_options' ) ) {
 			// If the settings menu and fields were not already added by another Keevault plugin, add them.
+			add_action( 'admin_menu', [ $this, 'add_keevault_menu' ] );
+
 			if ( ! defined( 'KEEVAULT_LM' ) ) {
-				add_action( 'admin_menu', [ $this, 'add_keevault_menu' ] );
 				add_action( 'admin_init', [ $this, 'keevault_settings_init' ] );
 			}
 
@@ -218,7 +219,6 @@ class Keevault_LM_Contracts_WC_Integration {
 			echo '<table class="woocommerce-orders-table woocommerce-orders-table--contracts shop_table shop_table_responsive">';
 			echo '<thead>';
 			echo '<tr>';
-			echo '<th class="woocommerce-orders-table__header woocommerce-orders-table__header-order-id"><span class="nobr">' . esc_html__( 'ID', 'keevault' ) . '</span></th>';
 			echo '<th class="woocommerce-orders-table__header woocommerce-orders-table__header-item-id"><span class="nobr">' . esc_html__( 'Order ID', 'keevault' ) . '</span></th>';
 			echo '<th class="woocommerce-orders-table__header woocommerce-orders-table__header-name"><span class="nobr">' . esc_html__( 'Name', 'keevault' ) . '</span></th>';
 			echo '<th class="woocommerce-orders-table__header woocommerce-orders-table__header-contract-key"><span class="nobr">' . esc_html__( 'Contract Key', 'keevault' ) . '</span></th>';
@@ -233,7 +233,6 @@ class Keevault_LM_Contracts_WC_Integration {
 				$created_at = ( ! empty( $row['created_at'] ) ) ? date_i18n( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), strtotime( $row['created_at'] ) ) : '';
 
 				echo '<tr class="woocommerce-orders-table__row">';
-				echo '<td class="woocommerce-orders-table__cell woocommerce-orders-table__cell-order-id">' . esc_html( $row['id'] ) . '</td>';
 				echo '<td class="woocommerce-orders-table__cell woocommerce-orders-table__cell-item-id">' . esc_html( $row['order_id'] ) . '</td>';
 				echo '<td class="woocommerce-orders-table__cell woocommerce-orders-table__cell-name">' . esc_html( $row['name'] ) . '</td>';
 				echo '<td class="woocommerce-orders-table__cell woocommerce-orders-table__cell-contract-key">' . esc_html( $row['contract_key'] ) . '</td>';
@@ -310,18 +309,22 @@ class Keevault_LM_Contracts_WC_Integration {
 	}
 
 	public function add_keevault_menu(): void {
-		add_menu_page(
-			esc_html__( 'Keevault', 'keevault' ),
-			esc_html__( 'Keevault', 'keevault' ),
-			'manage_options',
-			'keevault-contracts',
-			[ $this, 'contracts_page' ],
-			'dashicons-admin-network',
-			30
-		);
+		$keevault_menu_exists = $this->is_top_level_menu_slug_exists( 'keevault' );
+
+		if ( ! $keevault_menu_exists ) {
+			add_menu_page(
+				esc_html__( 'Keevault', 'keevault' ),
+				esc_html__( 'Keevault', 'keevault' ),
+				'manage_options',
+				'keevault',
+				'__return_null',
+				'dashicons-admin-network',
+				30
+			);
+		}
 
 		add_submenu_page(
-			'keevault-contracts',
+			'keevault',
 			esc_html__( 'Contracts', 'keevault' ),
 			esc_html__( 'Contracts', 'keevault' ),
 			'manage_options',
@@ -330,15 +333,19 @@ class Keevault_LM_Contracts_WC_Integration {
 			40
 		);
 
-		add_submenu_page(
-			'keevault-contracts',
-			esc_html__( 'Settings', 'keevault' ),
-			esc_html__( 'Settings', 'keevault' ),
-			'manage_options',
-			'keevault-contracts-settings',
-			[ $this, 'settings_page' ],
-			50
-		);
+		if ( $keevault_menu_exists ) {
+			add_submenu_page(
+				'keevault',
+				esc_html__( 'Settings', 'keevault' ),
+				esc_html__( 'Settings', 'keevault' ),
+				'manage_options',
+				'keevault-contracts-settings',
+				[ $this, 'settings_page' ],
+				50
+			);
+		}
+
+		remove_submenu_page( 'keevault', 'keevault' );
 	}
 
 	public function keevault_settings_init(): void {
@@ -387,18 +394,18 @@ class Keevault_LM_Contracts_WC_Integration {
 	}
 
 	public function add_keevault_product_settings(): void {
-		echo '<div class="options_group">';
+		echo '<div class="options_group show_if_simple">';
 
 		woocommerce_wp_text_input( [
 			'id'          => '_keevault_product_id',
-			'label'       => esc_html__( 'Keevault Product ID', 'keevault' ),
+			'label'       => esc_html__( 'Keevault Product ID For Contracts', 'keevault' ),
 			'desc_tip'    => 'true',
 			'description' => esc_html__( 'Keevault Product ID for license creation.', 'keevault' ),
 		] );
 
 		woocommerce_wp_text_input( [
 			'id'                => '_keevault_license_quantity',
-			'label'             => esc_html__( 'License Keys Quantity', 'keevault' ),
+			'label'             => esc_html__( 'Contract License Keys Quantity', 'keevault' ),
 			'desc_tip'          => 'true',
 			'description'       => esc_html__( 'Number of license keys to create per purchase.', 'keevault' ),
 			'type'              => 'number',
@@ -416,22 +423,26 @@ class Keevault_LM_Contracts_WC_Integration {
 		update_post_meta( $post_id, '_keevault_license_quantity', $keevault_license_quantity );
 	}
 
-	public function add_keevault_variation_settings( $loop, $variation_data, $variation ) {
+	public function add_keevault_variation_settings( $loop, $variation_data, $variation ): void {
+		echo '<div class="options_group show_if_variable">';
+
 		woocommerce_wp_text_input( [
 			'id'          => '_keevault_product_id_' . $variation->ID,
-			'label'       => esc_html__( 'Keevault Product ID', 'keevault' ),
+			'label'       => esc_html__( 'Keevault Product ID For Contracts', 'keevault' ),
 			'description' => esc_html__( 'Keevault Product ID for this variation.', 'keevault' ),
 			'value'       => get_post_meta( $variation->ID, '_keevault_product_id', true )
 		] );
 
 		woocommerce_wp_text_input( [
 			'id'                => '_keevault_license_quantity_' . $variation->ID,
-			'label'             => esc_html__( 'License Keys Quantity', 'keevault' ),
+			'label'             => esc_html__( 'Contract License Keys Quantity', 'keevault' ),
 			'description'       => esc_html__( 'Number of license keys to create for this variation.', 'keevault' ),
 			'type'              => 'number',
 			'custom_attributes' => [ 'min' => '1' ],
 			'value'             => get_post_meta( $variation->ID, '_keevault_license_quantity', true )
 		] );
+
+		echo '</div>';
 	}
 
 	public function save_keevault_variation_settings( $variation_id, $i ): void {
@@ -491,6 +502,7 @@ class Keevault_LM_Contracts_WC_Integration {
 			$response      = wp_remote_post( $api_url . $endpoint, [
 				'method' => 'POST',
 				'body'   => $body,
+				//'sslverify' => false
 			] );
 			$response_body = null;
 
@@ -528,6 +540,19 @@ class Keevault_LM_Contracts_WC_Integration {
 		$data[8] = chr( ord( $data[8] ) & 0x3f | 0x80 ); // set bits 6-7 to 10
 
 		return vsprintf( '%s%s-%s-%s-%s-%s%s%s', str_split( bin2hex( $data ), 4 ) );
+	}
+
+	public function is_top_level_menu_slug_exists( $slug ): bool {
+		global $menu;
+
+		// Loop through the top-level menus
+		foreach ( $menu as $menu_item ) {
+			if ( isset( $menu_item[2] ) && $menu_item[2] === $slug ) {
+				return true;
+			}
+		}
+
+		return false;
 	}
 
 	// Register activation hook for creating the database table
@@ -570,11 +595,7 @@ function keevault_lm_contracts_integration_init(): void {
 	new Keevault_LM_Contracts_WC_Integration();
 }
 
-if ( has_action( 'keevault_init' ) ) {
-	add_action( 'keevault_init', 'keevault_lm_contracts_integration_init' );
-} else {
-	add_action( 'init', 'keevault_lm_contracts_integration_init' );
-}
+add_action( 'plugins_loaded', 'keevault_lm_contracts_integration_init' );
 
 // Register the activation hook to create the database table
 register_activation_hook( __FILE__, [ 'Keevault_LM_Contracts_WC_Integration', 'activate' ] );
